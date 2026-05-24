@@ -7,9 +7,8 @@ const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 
-// In production, FRONTEND_URL is set as an environment variable on Render.
-// e.g. FRONTEND_URL=https://your-rmm.netlify.app
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+// Hardcode the frontend URL for CORS to prevent configuration issues
+const FRONTEND_URL = 'https://rmm-frontend.netlify.app';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 // Configure session middleware
