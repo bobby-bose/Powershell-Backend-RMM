@@ -16,7 +16,7 @@ const sessionMiddleware = session({
     secret: process.env.SESSION_SECRET || 'super-secret-key-12345',
     resave: false,
     saveUninitialized: false,
-    cookie: { 
+    cookie: {
         secure: IS_PRODUCTION,       // true on Render (HTTPS), false locally
         httpOnly: true,
         sameSite: IS_PRODUCTION ? 'none' : 'lax', // 'none' required for cross-origin (Netlify→Render)
@@ -80,6 +80,15 @@ const requireAuth = (req, res, next) => {
 
 // --- API ROUTES ---
 
+// Health Check endpoints
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ALL OKAY' });
+});
+
+app.get('/helath', (req, res) => {
+    res.status(200).json({ status: 'ALL OKAY' });
+});
+
 // Get active agents list via API (Admin only)
 app.get('/api/agents', requireAuth, (req, res) => {
     const agentsList = Array.from(activeAgents.values());
@@ -94,19 +103,19 @@ app.get('/api/agents', requireAuth, (req, res) => {
 
 io.on('connection', (socket) => {
     const clientType = socket.handshake.query.type; // 'admin' or 'agent'
-    
+
     if (clientType === 'admin') {
         console.log(`Admin connected: ${socket.id}`);
         // Join admins room so we can broadcast only to admins
         socket.join('admins');
-        
+
         // Send current agent list immediately on connect
         socket.emit('admin:agents_list', Array.from(activeAgents.values()));
 
         socket.on('admin:get_agents', () => {
             socket.emit('admin:agents_list', Array.from(activeAgents.values()));
         });
-        
+
         socket.on('admin:execute_command', ({ device_id, command }) => {
             const agent = activeAgents.get(device_id);
             if (agent) {
@@ -117,25 +126,25 @@ io.on('connection', (socket) => {
                 console.warn(`Command sent to unknown device_id: ${device_id}`);
             }
         });
-        
+
         socket.on('disconnect', () => {
             console.log(`Admin disconnected: ${socket.id}`);
         });
-        
+
     } else if (clientType === 'agent') {
         console.log(`Agent connected: ${socket.id}`);
         let currentDeviceId = null;
-        
+
         socket.on('agent:register', (payload) => {
             const { device_id, hostname } = payload;
             currentDeviceId = device_id;
-            
+
             // Format IP address (convert IPv6 loopback to 'localhost')
             let ipAddress = socket.handshake.address;
             if (ipAddress === '::1' || ipAddress === '127.0.0.1' || ipAddress === '::ffff:127.0.0.1') {
                 ipAddress = 'localhost';
             }
-            
+
             activeAgents.set(device_id, {
                 device_id,
                 hostname,
@@ -144,11 +153,11 @@ io.on('connection', (socket) => {
                 last_seen: Date.now()
             });
             console.log(`Agent registered: ${hostname} (${device_id}) from ${ipAddress}`);
-            
+
             // Broadcast updated list only to admin clients
             io.to('admins').emit('admin:agents_list', Array.from(activeAgents.values()));
         });
-        
+
         socket.on('agent:heartbeat', () => {
             if (currentDeviceId && activeAgents.has(currentDeviceId)) {
                 const agent = activeAgents.get(currentDeviceId);
@@ -156,7 +165,7 @@ io.on('connection', (socket) => {
                 activeAgents.set(currentDeviceId, agent);
             }
         });
-        
+
         socket.on('agent:output', (payload) => {
             const { command_id, chunk } = payload;
             if (currentDeviceId) {
@@ -167,7 +176,7 @@ io.on('connection', (socket) => {
                 });
             }
         });
-        
+
         socket.on('disconnect', () => {
             console.log(`Agent disconnected: ${socket.id}`);
             if (currentDeviceId) {
@@ -188,14 +197,14 @@ io.on('connection', (socket) => {
 setInterval(() => {
     const now = Date.now();
     let changed = false;
-    
+
     for (const [deviceId, agent] of activeAgents.entries()) {
         // If no heartbeat for 25 seconds, remove agent
         if (now - agent.last_seen > 25000) {
             console.log(`Agent timed out: ${agent.hostname} (${deviceId})`);
             activeAgents.delete(deviceId);
             changed = true;
-            
+
             // Optional: Disconnect the socket forcibly
             const socket = io.sockets.sockets.get(agent.socket_id);
             if (socket) {
@@ -203,7 +212,7 @@ setInterval(() => {
             }
         }
     }
-    
+
     if (changed) {
         io.emit('admin:agents_list', Array.from(activeAgents.values()));
     }
